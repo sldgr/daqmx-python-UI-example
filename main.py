@@ -1,5 +1,5 @@
 """
-Portions of this code originally authored by: mp-007
+UI Portions of this code (the graph widget) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
 
@@ -12,8 +12,11 @@ from kivy.lang import Builder
 from kivy.app import App
 from kivy.clock import Clock
 from graph_generator import GraphGenerator
+
 from multiprocessing import Queue
+from nidaqmx.constants import TerminalConfiguration
 import numpy as np
+from daqmx_reader import launch_run_process, destroy_run_process
 
 # Define the entire UI layout with the KV language
 KV = '''
@@ -22,24 +25,30 @@ Screen
     figure_wgt:figure_wgt
     BoxLayout:
         orientation:'vertical'
+        padding: [10, 10, 10, 10]
         BoxLayout:
             size_hint_y:0.1
             Button:
-                text:"home"
+                text:"Home"
                 on_release:app.home()
             ToggleButton:
                 group:'touch_mode'
                 state:'down'
-                text:"pan" 
+                text:"Pan" 
                 on_release:
                     app.set_touch_mode('pan')
                     self.state='down'
             ToggleButton:
                 group:'touch_mode'
-                text:"zoom box"  
+                text:"Box Zoom"  
                 on_release:
                     app.set_touch_mode('zoombox')
                     self.state='down'   
+            Button:
+                text: "Start Acquisition"
+            Button:
+                text: "Stop Acquisition"
+                
         BoxLayout:    
             size_hint_y: .7         
             MatplotFigure:
@@ -55,7 +64,7 @@ Screen
                     Label:
                         text: 'CHANNEL SETTINGS'
                         text_size: self.size
-                        halign: 'left'
+                        halign: 'center'
                         valign: 'middle'
                         padding_x: 15
                     Label:
@@ -95,7 +104,7 @@ Screen
                     Label:
                         text: 'TIMING SETTINGS'
                         text_size: self.size
-                        halign: 'left'
+                        halign: 'center'
                         valign: 'middle'
                         padding_x: 15
                     Label:
@@ -121,7 +130,7 @@ Screen
                         valign: 'middle'
                         padding_x: 15
                     TextInput:
-                        input_filter: int                    
+                        input_filter: int                
 '''
 
 X = np.linspace(0, 10 * np.pi, 1000)
@@ -150,10 +159,17 @@ class App(App):
         self.screen.figure_wgt.ymax = 1.1
         self.screen.figure_wgt.line1 = mygraph.line1
         self.home()
+        """ We can use the built-in features of the kivy state machine to schedule a reoccurring call """
         Clock.schedule_interval(self.update_graph, 1 / 60)
 
+        """ Initial the needed objects for the daqmx_reader AnalogInputReader() """
+        # TODO: Replace these hardcoded default values with the kivy utilities for creating and reading from an INI
+        #  file at init
         self.ui_queue = Queue()
         self.cmd_queue = Queue()
+        self.task_configuration = {'sample_clock_source': 'OnBoardClock', 'sample_rate': 1000, 'samples_per_read': 100,
+                                   'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
+                                   'terminal_configuration': TerminalConfiguration.DEFAULT}
 
     def set_touch_mode(self, mode):
         self.screen.figure_wgt.touch_mode = mode
@@ -177,6 +193,17 @@ class App(App):
         else:
             Clock.unschedule(self.update_graph)
 
+    def start_acquisition(self):
+        """ Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
+        turn creates, configures, starts, and reads from a single-channel DAQmx analog input task. """
+        self.reader = launch_run_process(task_configuration=self.task_configuration, ui_queue=self.ui_queue,
+                                         cmd_queue=self.cmd_queue)
+
+    def stop_acquisition(self):
+        """ Properly shuts down the task currently running, in turn destroying the currently running MultiProcessing
+        process """
+        destroy_run_process(reader_process=self.reader, ui_queue=self.ui_queue, cmd_queue=self.cmd_queue)
+
     def update_physical_channel(self):
         """ Updates the physical channel to be used for the DAQmx task """
 
@@ -197,6 +224,7 @@ class App(App):
 
     def update_number_of_samples(self):
         """ Updates the sample rate to be used for the DAQmx task """
+
 
 if __name__ == "__main__":
     App().run()

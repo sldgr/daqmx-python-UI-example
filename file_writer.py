@@ -1,5 +1,5 @@
 """
-Portions of this code are originally authored by: pbellino
+This code is originally authored by: pbellino
 Source: https://github.com/pbellino/daq_nidaqmx_example
 """
 

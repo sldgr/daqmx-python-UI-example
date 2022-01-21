@@ -1,5 +1,5 @@
 """
-Portions of this code originally authored by: mp-007
+This code is originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
 

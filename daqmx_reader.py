@@ -1,8 +1,3 @@
-"""
-Portions of this code are originally authored by: pbellino
-Source: https://github.com/pbellino/daq_nidaqmx_example
-"""
-
 from multiprocessing import Process, Queue
 from time import sleep
 
@@ -41,8 +36,10 @@ def destroy_run_process(reader_process, ui_queue, cmd_queue):
     stop_msg = GLOBAL_STOP
     cmd_queue.put(stop_msg)
 
-    """Empty both queues now so the caller of these methods can reuse the same queues if we want to launch a new 
-    process. You have to manually do this as far as I am aware but there may be a better option here. """
+    """
+    Empty both queues now so the caller of these methods can reuse the same queues if we want to launch a new 
+    process. You have to manually do this as far as I am aware but there may be a better option here. 
+    """
     while not ui_queue.empty():
         ui_queue.get()
     reader_process.join()
@@ -98,10 +95,12 @@ class AnalogInputReader:
                 """ Write our data to the data writer """
                 self.writer.write_data(self.input_data)
             except Exception as e:
+                print(e)
                 break
             try:
                 msg = self.cmd_queue.get(block=False)
             except Exception as e:
+                print(e)
                 msg = ""
             if msg == GLOBAL_STOP:
                 break
@@ -147,9 +146,7 @@ class AnalogInputReader:
 
 
 if __name__ == "__main__":
-    """ 
-    used for debug
-    """
+    """ used for debug if run standalone """
     smpl_clk = "OnboardClock"
     smpl_rt = 100
     smpl_per_ch = 10
