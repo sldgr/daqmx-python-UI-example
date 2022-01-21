@@ -1,5 +1,4 @@
-from multiprocessing import Process, Queue
-from time import sleep
+from multiprocessing import Queue
 
 import nidaqmx
 import numpy as np
@@ -8,41 +7,10 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader
 
 from file_writer import DataWriter
 
+from kivy.core.window import Window
+
 """ GLOBAL CONSTANTS """
 GLOBAL_STOP = 'S'
-
-
-def launch_run_process(task_configuration, ui_queue, cmd_queue):
-    """
-    This method launches the run process using multiprocessing.Process(). This process will use the configuration
-    data provided at __init__ to create, configure, start, read from, and stop the NI
-    DAQmx task. The run_process can be terminated using the destroy_run_process method below.
-    """
-
-    new_reader = AnalogInputReader(task_configuration=task_configuration,
-                                   ui_queue=ui_queue, cmd_queue=cmd_queue)
-    reader_process = Process(target=new_reader.run_process)
-    reader_process.daemon = False
-    reader_process.start()
-
-    return reader_process
-
-
-def destroy_run_process(reader_process, ui_queue, cmd_queue):
-    global GLOBAL_STOP
-    """
-    This method properly shuts down the currently running run_process using a specific queue message
-    """
-    stop_msg = GLOBAL_STOP
-    cmd_queue.put(stop_msg)
-
-    """
-    Empty both queues now so the caller of these methods can reuse the same queues if we want to launch a new 
-    process. You have to manually do this as far as I am aware but there may be a better option here. 
-    """
-    while not ui_queue.empty():
-        ui_queue.get()
-    reader_process.join()
 
 
 class AnalogInputReader:
@@ -57,6 +25,7 @@ class AnalogInputReader:
         task_configuration = {sample_clock_source, sample_rate, samples_per_read, channel, dev_name, max_voltage,
         min_voltage, terminal_configuration}
         """
+        Window.hide()
         self.sample_clock_source = task_configuration['sample_clock_source']
         self.sample_rate = task_configuration['sample_rate']
         self.samples_per_read = task_configuration['samples_per_read']
@@ -95,12 +64,10 @@ class AnalogInputReader:
                 """ Write our data to the data writer """
                 self.writer.write_data(self.input_data)
             except Exception as e:
-                print(e)
                 break
             try:
                 msg = self.cmd_queue.get(block=False)
             except Exception as e:
-                print(e)
                 msg = ""
             if msg == GLOBAL_STOP:
                 break
@@ -143,6 +110,8 @@ class AnalogInputReader:
 
         self.task.stop()
         self.task.close()
+        self.cmd_queue.put('')
+        Window.close()
 
 
 if __name__ == "__main__":
@@ -160,7 +129,3 @@ if __name__ == "__main__":
     test_config = {'sample_clock_source': smpl_clk, 'sample_rate': smpl_rt, 'samples_per_read': smpl_per_ch,
                    'channel': ch, 'dev_name': dev_name, 'max_voltage': max_volt, 'min_voltage': min_vol,
                    'terminal_configuration': term_cfg}
-
-    test = launch_run_process(task_configuration=test_config, ui_queue=uiq, cmd_queue=cmq)
-    sleep(10)
-    destroy_run_process(reader_process=test, ui_queue=uiq, cmd_queue=cmq)

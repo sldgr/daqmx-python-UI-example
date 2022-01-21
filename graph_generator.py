@@ -44,5 +44,5 @@ class GraphGenerator(object):
 
         self.ax1.set_xlim(self.xmin, self.xmax)
         self.ax1.set_ylim(self.ymin, self.ymax)
-        self.ax1.set_xlabel("Time (s)", fontsize=font_size_axis_title)
-        self.ax1.set_ylabel("Voltage (V)", fontsize=font_size_axis_title)  #
+        self.ax1.set_xlabel("Samples", fontsize=font_size_axis_title)
+        self.ax1.set_ylabel("Voltage (V)", fontsize=font_size_axis_title)
