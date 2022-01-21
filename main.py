@@ -11,9 +11,8 @@ Config.set('input', 'mouse', 'mouse,disable_on_activity')
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.clock import Clock
-from daqmxwithkivy.graph_generator import GraphGenerator
-from daqmxwithkivy.daqmx_reader import AnalogInputReader
-from multiprocessing import Process, Queue
+from graph_generator import GraphGenerator
+from multiprocessing import Queue
 import numpy as np
 
 # Define the entire UI layout with the KV language

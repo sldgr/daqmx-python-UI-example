@@ -11,7 +11,7 @@ import numpy as np
 from nidaqmx.constants import AcquisitionType
 from nidaqmx.stream_readers import AnalogSingleChannelReader
 
-from daqmxwithkivy.file_writer import DataWriter
+from file_writer import DataWriter
 
 """ GLOBAL CONSTANTS """
 GLOBAL_STOP = 'S'
