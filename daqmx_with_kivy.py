@@ -1,5 +1,19 @@
 """
-UI Portions of this code (the graph widget) originally authored by: mp-007
+
+daqmx_with_kivy.py: This is the main script for the DAQmx with Kivy example app. This is a python take on the
+LabVIEW built-in example VI called Voltage - Continuous Input. Like the G-code equivalent, this code features the
+ability to configure, start and stop a DAQmx single-channel analog input voltage task. Other features worth
+mentioning include:
+
+    1. Use of Kivy, a cross-platform NUI development framework for python allowing easy separation of a UI layout and
+    business logic
+    2. Real-time, (60+ FPS) graph display with home, zoom, and pan
+    3. Automatic logging of acquired data to a .dat file
+    4. Use of the python multiprocessing package to separate the Kivy App process from the DAQmx Stream Reader process
+
+For more details, see the README.md
+
+UI Portions of this code (the graph_widget.py and graph_generator.py files) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
 
@@ -10,7 +24,7 @@ from nidaqmx.constants import TerminalConfiguration
 
 from daqmx_reader import AnalogInputReader
 
-""" Global constants """
+# Global Constants
 GLOBAL_STOP = 'S'
 """ Define the entire UI layout and event functionality with the KV language. This could also be its own .kv file."""
 KV = '''
@@ -19,7 +33,7 @@ Screen
     figure_wgt:figure_wgt
     BoxLayout:
         orientation:'vertical'
-        padding: [10, 10, 10, 10]
+        padding: [20, 20, 20, 20]
         BoxLayout:
             size_hint_y:0.1
             Button:
@@ -44,12 +58,12 @@ Screen
             Button:
                 text: "Stop Acquisition"
                 on_release: app.stop_acquisition()
-        BoxLayout:    
-            size_hint_y: .7         
-            MatplotFigure:
-                id:figure_wgt  
         BoxLayout:
-            size_hint_y: .4
+            size_hint_y: 1
+            MatplotFigure:
+                id:figure_wgt 
+        BoxLayout:
+            size_hint_y: .5
             GridLayout:
                 rows: 1
                 cols: 2
@@ -57,94 +71,100 @@ Screen
                     rows: 6
                     cols: 2
                     Label:
+                    Label:
                         text: 'CHANNEL SETTINGS'
-                        text_size: self.size
-                        halign: 'center'
-                        valign: 'middle'
-                        padding_x: 15
-                    Label:
-                    Label:
-                        text: 'DAQmx Device Name'
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
-                        padding_x: 15
+                    Label:
+                        text: 'DAQmx Device Name: '
+                        text_size: self.size
+                        halign: 'right'
+                        valign: 'middle'
                     TextInput:
                         hint_text: 'PXI1Slot2'
                         multiline: False
                     Label:
-                        text: 'AI Channel Number'
+                        text: 'AI Channel Number: '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
-                        padding_x: 15
                     TextInput:
                         input_filter: int
                         hint_text: '0'
                         multiline: False
                     Label:
-                        text: 'Max Voltage'
+                        text: 'Max Voltage: '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
-                        padding_x: 15
                     TextInput:
                         input_filter: int
                         hint_text: '5'
                         multiline: False
                     Label:
-                        text: 'Min Voltage'
+                        text: 'Min Voltage: '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
-                        padding_x: 15
                     TextInput:
                         input_filter: int
                         hint_text: '-5'
                         multiline: False
                     Label:
-                        text: 'Terminal Configuration'
+                        text: 'Terminal Configuration: '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
-                        padding_x: 15
                     TextInput:
-                GridLayout:
-                    rows: 4
-                    cols: 2
-                    Label:
-                        text: 'TIMING SETTINGS'
-                        text_size: self.size
-                        halign: 'center'
-                        valign: 'middle'
-                        padding_x: 15
-                    Label:
-                    Label:
-                        text: 'Sample Clock Source'
-                        text_size: self.size
-                        halign: 'right'
-                        valign: 'middle'
-                        padding_x: 15
-                    TextInput:
-                    Label:
-                        text: 'Sample Rate'
-                        text_size: self.size
-                        halign: 'right'
-                        valign: 'middle'
-                        padding_x: 15
-                    TextInput:
-                        input_filter: int
-                    Label:
-                        text: 'Number of Samples'
-                        text_size: self.size
-                        halign: 'right'
-                        valign: 'middle'
-                        padding_x: 15
-                    TextInput:
-                        input_filter: int                
+                        hint_text: 'DEFAULT'
+                        multline: False
+                BoxLayout
+                    orientation:'vertical'
+                    GridLayout:
+                        rows: 4
+                        cols: 2
+                        Label:
+                        Label:
+                            text: 'TIMING SETTINGS'
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        Label:
+                            text: 'Sample Clock Source: '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                        Label:
+                            text: 'Sample Rate: '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                            input_filter: int
+                        Label:
+                            text: 'Number of Samples: '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                            input_filter: int
+                    GridLayout:
+                        rows: 1
+                        cols: 2
+                        Label:
+                            text: 'Error: '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                            multiline: False
+                               
 '''
 
 
+# Function to launch the run process
 def launch_run_process(task_configuration, ui_queue, cmd_queue):
     """
     This method launches the run process using multiprocessing.Process(). This process will use the configuration
@@ -157,21 +177,25 @@ def launch_run_process(task_configuration, ui_queue, cmd_queue):
     new_reader.run_process()
 
 
+# Function to safely close and kill the run process
 def destroy_run_process(reader_process, ui_queue, cmd_queue):
     """
     This method properly shuts down the currently running run_process using a specific queue message
     """
     stop_msg = GLOBAL_STOP
     cmd_queue.put(stop_msg)
-    # Empty the UI queue now so the caller of these methods can reuse the same queues if we want to launch a new
-    # process. You have to manually do this as far as I am aware but there may be a better option here.
-
+    # Empty the UI queue enabling us to properly shut down our process
     while not ui_queue.empty():
         ui_queue.get()
+    # After the command queue sends the stop message 'S', we wait for the finished message 'F'. If we receive it,
+    # we know the DAQmx task has safely cleared and closed itself, thus we can safely close the reader process.
     cmd_queue.get(block=True, timeout=None)
     reader_process.kill()
 
 
+# Guard allowing use to separate the Kivy logic entirely from the multiprocessing DAQmx functions. We have to keep
+# all Kivy imports here to prevent Windows from launching another window when we launch a new process. This is
+# discussed in detail here: https://github.com/kivy/kivy/issues/4744
 if __name__ == "__main__":
     from kivy.config import Config
 
@@ -179,6 +203,7 @@ if __name__ == "__main__":
 
     from kivy.core.window import Window
 
+    # Set the minimum window size as the default app launch size
     window_sizes = Window.size
     Window.minimum_width, Window.minimum_height = window_sizes
 
@@ -196,6 +221,13 @@ if __name__ == "__main__":
         def build(self):
             """ Kivy method for building the app by returning a widget """
             self.i = 0
+            # TODO: Replace these hard-coded default values with the kivy utilities for creating and reading from an INI
+            #  file at init
+            self.task_configuration = {'sample_clock_source': 'OnBoardClock', 'sample_rate': 60,
+                                       'samples_per_read': 30,
+                                       'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
+                                       'terminal_configuration': TerminalConfiguration.DEFAULT}
+
             self.screen = Builder.load_string(KV)
             return self.screen
 
@@ -240,15 +272,8 @@ if __name__ == "__main__":
 
         def start_acquisition(self):
             """ Initialize the needed objects for the daqmx_reader AnalogInputReader() """
-            # TODO: Replace these hard-coded default values with the kivy utilities for creating and reading from an INI
-            #  file at init
             self.ui_queue = Queue()
             self.cmd_queue = Queue()
-            self.task_configuration = {'sample_clock_source': 'OnBoardClock', 'sample_rate': 60,
-                                       'samples_per_read': 30,
-                                       'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
-                                       'terminal_configuration': TerminalConfiguration.DEFAULT}
-            self.task_running = False
             # Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in turn creates, configures, starts, and reads from a single-channel DAQmx analog input task.
             try:
                 self.reader_process = Process(target=launch_run_process,
@@ -269,6 +294,7 @@ if __name__ == "__main__":
                 Clock.unschedule(self.update_graph)
                 self.i = 0
                 self.y = 0
+                self.task_running = False
             except Exception as e:
                 print(e)
 

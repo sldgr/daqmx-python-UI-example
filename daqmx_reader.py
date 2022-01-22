@@ -1,3 +1,22 @@
+"""
+
+daqmx_with_kivy.py: This is the main script for the DAQmx with Kivy example app. This is a python take on the
+LabVIEW built-in example VI called Voltage - Continuous Input. Like the G-code equivalent, this code features the
+ability to configure, start and stop a DAQmx single-channel analog input voltage task. Other features worth
+mentioning include:
+
+    1. Use of Kivy, a cross-platform NUI development framework for python allowing easy separation of a UI layout and
+    business logic
+    2. Real-time, (60+ FPS) graph display with home, zoom, and pan
+    3. Automatic logging of acquired data to a .dat file
+    4. Use of the python multiprocessing package to separate the Kivy App process from the DAQmx Stream Reader process
+
+For more details, see the README.md
+
+UI Portions of this code (the graph_widget.py and graph_generator.py files) originally authored by: mp-007
+Source: https://github.com/mp-007/kivy_matplotlib_widget
+"""
+
 import queue
 
 import nidaqmx
@@ -7,7 +26,7 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader
 
 from file_writer import DataWriter
 
-# GLOBAL_CONSTANTS
+# GLOBAL CONSTANTS
 # TODO: These should be defined elsewhere as they are reused in multiple files
 GLOBAL_STOP = 'S'
 
