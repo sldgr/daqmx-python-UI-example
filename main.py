@@ -49,12 +49,12 @@ Screen
             MatplotFigure:
                 id:figure_wgt  
         BoxLayout:
-            size_hint_y: .3
+            size_hint_y: .4
             GridLayout:
                 rows: 1
                 cols: 2
                 GridLayout:
-                    rows: 5
+                    rows: 6
                     cols: 2
                     Label:
                         text: 'CHANNEL SETTINGS'
@@ -64,12 +64,24 @@ Screen
                         padding_x: 15
                     Label:
                     Label:
-                        text: 'Physical Channel'
+                        text: 'DAQmx Device Name'
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
                         padding_x: 15
                     TextInput:
+                        hint_text: 'PXI1Slot2'
+                        multiline: False
+                    Label:
+                        text: 'AI Channel Number'
+                        text_size: self.size
+                        halign: 'right'
+                        valign: 'middle'
+                        padding_x: 15
+                    TextInput:
+                        input_filter: int
+                        hint_text: '0'
+                        multiline: False
                     Label:
                         text: 'Max Voltage'
                         text_size: self.size
@@ -78,6 +90,8 @@ Screen
                         padding_x: 15
                     TextInput:
                         input_filter: int
+                        hint_text: '5'
+                        multiline: False
                     Label:
                         text: 'Min Voltage'
                         text_size: self.size
@@ -86,6 +100,8 @@ Screen
                         padding_x: 15
                     TextInput:
                         input_filter: int
+                        hint_text: '-5'
+                        multiline: False
                     Label:
                         text: 'Terminal Configuration'
                         text_size: self.size
@@ -147,10 +163,9 @@ def destroy_run_process(reader_process, ui_queue, cmd_queue):
     """
     stop_msg = GLOBAL_STOP
     cmd_queue.put(stop_msg)
-    """
-    Empty the UI queue now so the caller of these methods can reuse the same queues if we want to launch a new 
-    process. You have to manually do this as far as I am aware but there may be a better option here. 
-    """
+    # Empty the UI queue now so the caller of these methods can reuse the same queues if we want to launch a new
+    # process. You have to manually do this as far as I am aware but there may be a better option here.
+
     while not ui_queue.empty():
         ui_queue.get()
     cmd_queue.get(block=True, timeout=None)
@@ -161,6 +176,11 @@ if __name__ == "__main__":
     from kivy.config import Config
 
     Config.set('input', 'mouse', 'mouse,disable_on_activity')
+
+    from kivy.core.window import Window
+
+    window_sizes = Window.size
+    Window.minimum_width, Window.minimum_height = window_sizes
 
     from kivy.lang import Builder
     from kivy.app import App
@@ -176,21 +196,12 @@ if __name__ == "__main__":
         def build(self):
             """ Kivy method for building the app by returning a widget """
             self.i = 0
-            self.y = 0.00000000
             self.screen = Builder.load_string(KV)
             return self.screen
 
         def on_start(self, *args):
             """ Called right after build() """
-            mygraph = GraphGenerator()
-            self.screen.figure_wgt.figure = mygraph.fig
-            self.screen.figure_wgt.axes = mygraph.ax1
-            self.screen.figure_wgt.xmin = 0
-            self.screen.figure_wgt.xmax = 50
-            self.screen.figure_wgt.ymin = -5
-            self.screen.figure_wgt.ymax = 5
-            self.screen.figure_wgt.line1 = mygraph.line1
-            self.home()
+            self.reset_graph()
 
         def set_touch_mode(self, mode):
             self.screen.figure_wgt.touch_mode = mode
@@ -200,7 +211,7 @@ if __name__ == "__main__":
 
         def update_graph(self, _):
             try:
-                self.y = float(self.ui_queue.get_nowait())
+                self.y = float(self.ui_queue.get())
             except Exception:
                 pass
 
@@ -238,14 +249,13 @@ if __name__ == "__main__":
                                        'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
                                        'terminal_configuration': TerminalConfiguration.DEFAULT}
             self.task_running = False
-            """ Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
-            turn creates, configures, starts, and reads from a single-channel DAQmx analog input task. """
+            # Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in turn creates, configures, starts, and reads from a single-channel DAQmx analog input task.
             try:
                 self.reader_process = Process(target=launch_run_process,
                                               args=(self.task_configuration, self.ui_queue, self.cmd_queue))
                 self.reader_process.start()
                 self.task_running = True
-                """ We can use the built-in features of the kivy state machine to schedule a reoccurring call """
+                # We can use the built-in features of the kivy state machine to schedule a reoccurring call at out desired rate. In this case, this rate corresponds to the maximum update time of the graph
                 Clock.schedule_interval(self.update_graph, 1 / 60)
             except Exception as e:
                 print(e)

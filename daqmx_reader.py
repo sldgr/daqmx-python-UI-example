@@ -1,4 +1,4 @@
-from multiprocessing import Queue
+import queue
 
 import nidaqmx
 import numpy as np
@@ -7,8 +7,8 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader
 
 from file_writer import DataWriter
 
-
-""" GLOBAL CONSTANTS """
+# GLOBAL_CONSTANTS
+# TODO: These should be defined elsewhere as they are reused in multiple files
 GLOBAL_STOP = 'S'
 
 
@@ -38,7 +38,6 @@ class AnalogInputReader:
         self.input_data = np.empty(shape=(self.samples_per_read,))
 
     def run_process(self):
-        global GLOBAL_STOP
         """
         Read from the DAQmx task which is acquiring at sample_rate. This method should be run in its own thread or
         process to allow for the DAQmx Read methods timeout to control the loop rate. Each loop iteration acquires
@@ -46,7 +45,7 @@ class AnalogInputReader:
         timeout is 10 seconds.
         """
 
-        """ Initialize the data writer for logging """
+        # Initialize the data writer for logging
         self.writer = DataWriter()
 
         self.create_task()
@@ -54,19 +53,20 @@ class AnalogInputReader:
 
         while True:
             try:
-                """ Read from the DAQmx buffer the required number of samples on the configured channel """
+                # Read from the DAQmx buffer the required number of samples on the configured channel
                 self.reader.read_many_sample(data=self.input_data, number_of_samples_per_channel=self.samples_per_read,
                                              timeout=10.0)
-                lis = list(self.input_data)
-                """ Use the map keyword to more quickly append our data to the UI queue """
-                list(map(self.ui_queue.put, lis))
-                """ Write our data to the data writer """
+                # Use the map keyword to more quickly append our data to the UI queue
+                list(map(self.ui_queue.put, self.input_data))
+                # Write our data to the data writer
                 self.writer.write_data(self.input_data)
             except Exception as e:
+                print(e)
                 break
             try:
                 msg = self.cmd_queue.get(block=False)
-            except Exception as e:
+            except queue.Empty:
+                # We handle any queue get exception with no action. This is almost always
                 msg = ""
             if msg == GLOBAL_STOP:
                 break
@@ -79,19 +79,21 @@ class AnalogInputReader:
         Create a DAQmx task with the provided configuration parameters
         """
 
-        """ Create the task """
         self.task = nidaqmx.Task("Analog Input Task")
-        """ Create a temp dict to pass multiple arguments more easily """
+        # Create a temp dict to pass multiple arguments more easily
         chan_args = {
             "min_val": self.min_voltage,
             "max_val": self.max_voltage,
             "terminal_config": self.terminal_configuration
         }
-        """ Build the proper channel name using the device + channel """
+        # Build the proper channel name using the device + channel
         channel_name = self.dev_name + "/ai" + str(self.channel)
-        """ Add the DAQmx channel to the task """
+        # Add the DAQmx channel to the task
         self.task.ai_channels.add_ai_voltage_chan(channel_name, **chan_args)
-        """ Configure the timing of the task """
+        # Configure the timing of the task. Notice we do not specify the samples per channel. As this program only
+        # supports continuous acquisitions, samples per channel simply specifies the DAQmx PC buffer size which
+        # is usually ignored anyway as the default is sufficient.
+        # For more info, see: https://knowledge.ni.com/KnowledgeArticleDetails?id=kA03q000000YHpECAW&l=en-US
         self.task.timing.cfg_samp_clk_timing(rate=self.sample_rate, sample_mode=AcquisitionType.CONTINUOUS)
 
     def start_task(self):
@@ -109,21 +111,6 @@ class AnalogInputReader:
 
         self.task.stop()
         self.task.close()
+        # This may seem strange, but the main app that launches this process while wait for any message from this
+        # process
         self.cmd_queue.put('')
-
-
-if __name__ == "__main__":
-    """ used for debug if run standalone """
-    smpl_clk = "OnboardClock"
-    smpl_rt = 100
-    smpl_per_ch = 10
-    ch = 0
-    dev_name = "PXI1Slot2"
-    max_volt = 5
-    min_vol = -5
-    term_cfg = nidaqmx.constants.TerminalConfiguration.DEFAULT
-    uiq = Queue()
-    cmq = Queue()
-    test_config = {'sample_clock_source': smpl_clk, 'sample_rate': smpl_rt, 'samples_per_read': smpl_per_ch,
-                   'channel': ch, 'dev_name': dev_name, 'max_voltage': max_volt, 'min_voltage': min_vol,
-                   'terminal_configuration': term_cfg}
