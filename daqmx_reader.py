@@ -7,7 +7,6 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader
 
 from file_writer import DataWriter
 
-from kivy.core.window import Window
 
 """ GLOBAL CONSTANTS """
 GLOBAL_STOP = 'S'
@@ -25,7 +24,6 @@ class AnalogInputReader:
         task_configuration = {sample_clock_source, sample_rate, samples_per_read, channel, dev_name, max_voltage,
         min_voltage, terminal_configuration}
         """
-        Window.hide()
         self.sample_clock_source = task_configuration['sample_clock_source']
         self.sample_rate = task_configuration['sample_rate']
         self.samples_per_read = task_configuration['samples_per_read']
@@ -59,8 +57,9 @@ class AnalogInputReader:
                 """ Read from the DAQmx buffer the required number of samples on the configured channel """
                 self.reader.read_many_sample(data=self.input_data, number_of_samples_per_channel=self.samples_per_read,
                                              timeout=10.0)
+                lis = list(self.input_data)
                 """ Use the map keyword to more quickly append our data to the UI queue """
-                list(map(self.ui_queue.put, self.input_data))
+                list(map(self.ui_queue.put, lis))
                 """ Write our data to the data writer """
                 self.writer.write_data(self.input_data)
             except Exception as e:
@@ -111,7 +110,6 @@ class AnalogInputReader:
         self.task.stop()
         self.task.close()
         self.cmd_queue.put('')
-        Window.close()
 
 
 if __name__ == "__main__":

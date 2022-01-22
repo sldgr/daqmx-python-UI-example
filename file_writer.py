@@ -12,7 +12,7 @@ class DataWriter:
     Write data to file
     """
 
-    def __init__(self, filename="Output_Data.txt"):
+    def __init__(self, filename="Output_Data.dat"):
         super().__init__()
 
         if os.path.exists(filename):
@@ -23,7 +23,8 @@ class DataWriter:
         self._file.write("# I am the header\n")
 
     def write_data(self, incoming_data):
-        np.savetxt(self._file, incoming_data.T)
+        write_data = incoming_data.T
+        np.savetxt(self._file, write_data)
 
     def close_file(self):
         self._file.close()

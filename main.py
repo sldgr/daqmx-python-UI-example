@@ -3,7 +3,6 @@ UI Portions of this code (the graph widget) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
 
-import multiprocessing
 from multiprocessing import Queue, Process
 
 import numpy as np
@@ -158,133 +157,134 @@ def destroy_run_process(reader_process, ui_queue, cmd_queue):
     reader_process.kill()
 
 
-from kivy.config import Config
-
-Config.set('input', 'mouse', 'mouse,disable_on_activity')
-
-from kivy.lang import Builder
-from kivy.app import App
-from kivy.clock import Clock
-from graph_generator import GraphGenerator
-
-
-class MyApp(App):
-    """
-    Main kivy app class
-    """
-
-    def build(self):
-        """ Kivy method for building the app by returning a widget """
-        self.i = 0
-        self.y = 0
-        self.screen = Builder.load_string(KV)
-        return self.screen
-
-    def on_start(self, *args):
-        """ Called right after build() """
-        mygraph = GraphGenerator()
-        self.screen.figure_wgt.figure = mygraph.fig
-        self.screen.figure_wgt.axes = mygraph.ax1
-        self.screen.figure_wgt.xmin = 0
-        self.screen.figure_wgt.xmax = 50
-        self.screen.figure_wgt.ymin = -5
-        self.screen.figure_wgt.ymax = 5
-        self.screen.figure_wgt.line1 = mygraph.line1
-        self.home()
-
-    def set_touch_mode(self, mode):
-        self.screen.figure_wgt.touch_mode = mode
-
-    def home(self):
-        self.screen.figure_wgt.home()
-
-    def update_graph(self, _):
-        try:
-            self.y = self.ui_queue.get_nowait()
-        except Exception:
-            pass
-
-        xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
-        self.screen.figure_wgt.line1.set_data(xdata, np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
-        if self.i > 2:
-            self.screen.figure_wgt.xmax = np.max(xdata)
-            if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
-                self.home()
-            else:
-                self.screen.figure_wgt.figure.canvas.draw_idle()
-                self.screen.figure_wgt.figure.canvas.flush_events()
-
-        self.i += 1
-
-    def reset_graph(self):
-        mygraph = GraphGenerator()
-        self.screen.figure_wgt.figure = mygraph.fig
-        self.screen.figure_wgt.axes = mygraph.ax1
-        self.screen.figure_wgt.xmin = 0
-        self.screen.figure_wgt.xmax = 50
-        self.screen.figure_wgt.ymin = -5
-        self.screen.figure_wgt.ymax = 5
-        self.screen.figure_wgt.line1 = mygraph.line1
-        self.home()
-
-    def start_acquisition(self):
-        """ Initialize the needed objects for the daqmx_reader AnalogInputReader() """
-        # TODO: Replace these hard-coded default values with the kivy utilities for creating and reading from an INI
-        #  file at init
-        self.ui_queue = Queue()
-        self.cmd_queue = Queue()
-        self.task_configuration = {'sample_clock_source': 'OnBoardClock', 'sample_rate': 1000, 'samples_per_read': 100,
-                                   'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
-                                   'terminal_configuration': TerminalConfiguration.DEFAULT}
-        self.task_running = False
-        """ Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
-        turn creates, configures, starts, and reads from a single-channel DAQmx analog input task. """
-        try:
-            self.reader_process = Process(target=launch_run_process,
-                                          args=(self.task_configuration, self.ui_queue, self.cmd_queue))
-            self.reader_process.start()
-            self.task_running = True
-            """ We can use the built-in features of the kivy state machine to schedule a reoccurring call """
-            Clock.schedule_interval(self.update_graph, 1 / 120)
-        except Exception as e:
-            print(e)
-
-    def stop_acquisition(self):
-        """ Properly shuts down the task currently running, in turn destroying the currently running MultiProcessing
-        process """
-        try:
-            destroy_run_process(reader_process=self.reader_process, ui_queue=self.ui_queue, cmd_queue=self.cmd_queue)
-            Clock.unschedule(self.update_graph)
-            self.i = 0
-            self.y = 0
-        except Exception as e:
-            print(e)
-
-        self.reset_graph()
-
-    def update_physical_channel(self):
-        """ Updates the physical channel to be used for the DAQmx task """
-
-    def update_max_voltage(self):
-        """ Updates the max voltage to be used for the DAQmx task """
-
-    def update_min_voltage(self):
-        """ Updates the min voltage to be used for the DAQmx task """
-
-    def update_terminal_configuration(self):
-        """ Updates the terminal configuration to be used for the DAQmx task """
-
-    def update_sample_clock_source(self):
-        """ Updates the sample clock source to be used for the DAQmx task """
-
-    def update_sample_rate(self):
-        """ Updates the sample rate to be used for the DAQmx task """
-
-    def update_number_of_samples(self):
-        """ Updates the sample rate to be used for the DAQmx task """
-
-
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
+    from kivy.config import Config
+
+    Config.set('input', 'mouse', 'mouse,disable_on_activity')
+
+    from kivy.lang import Builder
+    from kivy.app import App
+    from kivy.clock import Clock
+    from graph_generator import GraphGenerator
+
+
+    class MyApp(App):
+        """
+        Main kivy app class
+        """
+
+        def build(self):
+            """ Kivy method for building the app by returning a widget """
+            self.i = 0
+            self.y = 0.00000000
+            self.screen = Builder.load_string(KV)
+            return self.screen
+
+        def on_start(self, *args):
+            """ Called right after build() """
+            mygraph = GraphGenerator()
+            self.screen.figure_wgt.figure = mygraph.fig
+            self.screen.figure_wgt.axes = mygraph.ax1
+            self.screen.figure_wgt.xmin = 0
+            self.screen.figure_wgt.xmax = 50
+            self.screen.figure_wgt.ymin = -5
+            self.screen.figure_wgt.ymax = 5
+            self.screen.figure_wgt.line1 = mygraph.line1
+            self.home()
+
+        def set_touch_mode(self, mode):
+            self.screen.figure_wgt.touch_mode = mode
+
+        def home(self):
+            self.screen.figure_wgt.home()
+
+        def update_graph(self, _):
+            try:
+                self.y = float(self.ui_queue.get_nowait())
+            except Exception:
+                pass
+
+            xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
+            self.screen.figure_wgt.line1.set_data(xdata, np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
+            if self.i > 2:
+                self.screen.figure_wgt.xmax = np.max(xdata)
+                if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
+                    self.home()
+                else:
+                    self.screen.figure_wgt.figure.canvas.draw_idle()
+                    self.screen.figure_wgt.figure.canvas.flush_events()
+
+            self.i += 1
+
+        def reset_graph(self):
+            mygraph = GraphGenerator()
+            self.screen.figure_wgt.figure = mygraph.fig
+            self.screen.figure_wgt.axes = mygraph.ax1
+            self.screen.figure_wgt.xmin = 0
+            self.screen.figure_wgt.xmax = 50
+            self.screen.figure_wgt.ymin = -5
+            self.screen.figure_wgt.ymax = 5
+            self.screen.figure_wgt.line1 = mygraph.line1
+            self.home()
+
+        def start_acquisition(self):
+            """ Initialize the needed objects for the daqmx_reader AnalogInputReader() """
+            # TODO: Replace these hard-coded default values with the kivy utilities for creating and reading from an INI
+            #  file at init
+            self.ui_queue = Queue()
+            self.cmd_queue = Queue()
+            self.task_configuration = {'sample_clock_source': 'OnBoardClock', 'sample_rate': 60,
+                                       'samples_per_read': 30,
+                                       'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
+                                       'terminal_configuration': TerminalConfiguration.DEFAULT}
+            self.task_running = False
+            """ Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
+            turn creates, configures, starts, and reads from a single-channel DAQmx analog input task. """
+            try:
+                self.reader_process = Process(target=launch_run_process,
+                                              args=(self.task_configuration, self.ui_queue, self.cmd_queue))
+                self.reader_process.start()
+                self.task_running = True
+                """ We can use the built-in features of the kivy state machine to schedule a reoccurring call """
+                Clock.schedule_interval(self.update_graph, 1 / 60)
+            except Exception as e:
+                print(e)
+
+        def stop_acquisition(self):
+            """ Properly shuts down the task currently running, in turn destroying the currently running MultiProcessing
+            process """
+            try:
+                destroy_run_process(reader_process=self.reader_process, ui_queue=self.ui_queue,
+                                    cmd_queue=self.cmd_queue)
+                Clock.unschedule(self.update_graph)
+                self.i = 0
+                self.y = 0
+            except Exception as e:
+                print(e)
+
+            self.reset_graph()
+
+        def update_physical_channel(self):
+            """ Updates the physical channel to be used for the DAQmx task """
+
+        def update_max_voltage(self):
+            """ Updates the max voltage to be used for the DAQmx task """
+
+        def update_min_voltage(self):
+            """ Updates the min voltage to be used for the DAQmx task """
+
+        def update_terminal_configuration(self):
+            """ Updates the terminal configuration to be used for the DAQmx task """
+
+        def update_sample_clock_source(self):
+            """ Updates the sample clock source to be used for the DAQmx task """
+
+        def update_sample_rate(self):
+            """ Updates the sample rate to be used for the DAQmx task """
+
+        def update_number_of_samples(self):
+            """ Updates the sample rate to be used for the DAQmx task """
+
+
     myApp = MyApp()
     MyApp().run()
