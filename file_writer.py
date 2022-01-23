@@ -12,7 +12,7 @@ class DataWriter:
     Write data to file
     """
 
-    def __init__(self, filename="Output_Data.sv"):
+    def __init__(self, filename="Output_Data.csv"):
         super().__init__()
 
         if os.path.exists(filename):

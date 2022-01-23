@@ -27,7 +27,7 @@ class AnalogInputReader:
     in a separate thread or process to allow the run_process to run independently of your main application.
     """
 
-    def __init__(self, task_configuration, ui_queue, cmd_queue, ack_queue, err_queue):
+    def __init__(self, task_configuration, ui_queue, cmd_queue, ack_queue):
         """
         Creates a new AnalogInputReader with the specified task configuration and queue references.
 
@@ -39,7 +39,6 @@ class AnalogInputReader:
         :param ui_queue: A multiprocessing queue that sends acquired float_64 data back to the caller
         :param cmd_queue: A multiprocessing queue that receives a stop command character from the caller
         :param ack_queue: A multiprocessing queue that send an ACK command back to the caller
-        :param err_queue: A multiprocessing queue that sends DAQmx errors back to the caller
         """
         self.sample_clock_source = task_configuration['sample_clock_source']
         self.sample_rate = task_configuration['sample_rate']
@@ -52,7 +51,6 @@ class AnalogInputReader:
         self.ui_queue = ui_queue
         self.cmd_queue = cmd_queue
         self.ack_queue = ack_queue
-        self.err_queue = err_queue
         # Create an empty numpy array of proper size to use for DAQmx stream reading
         self.input_data = np.empty(shape=(self.samples_per_read,))
 
@@ -81,10 +79,7 @@ class AnalogInputReader:
                     # Write our data to the data writer
                     self.writer.write_data(self.input_data)
                 except Exception as e:
-                    # Getting a DAQmx read error could mean several things, so second our error up to the caller and
-                    # exit
-                    self.err_queue.put(e)
-                    break
+                    raise e
                 try:
                     msg = self.cmd_queue.get(block=False)
                 except queue.Empty:
@@ -97,7 +92,7 @@ class AnalogInputReader:
             self.stop_task()
             self.writer.close_file()
         except Exception as e:
-            self.err_queue.put(e)
+            raise e
 
     def create_task(self):
         """
@@ -143,7 +138,5 @@ class AnalogInputReader:
             self.cmd_queue.get()
         while not self.ack_queue.empty():
             self.ack_queue.get()
-        while not self.err_queue.empty():
-            self.err_queue.get()
         # Send the global ACK back to the caller letting it know we are ready to die
         self.ack_queue.put(GLOBAL_ACK)
