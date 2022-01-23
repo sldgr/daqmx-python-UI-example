@@ -12,7 +12,7 @@ class DataWriter:
     Write data to file
     """
 
-    def __init__(self, filename="Output_Data.dat"):
+    def __init__(self, filename="Output_Data.sv"):
         super().__init__()
 
         if os.path.exists(filename):
@@ -20,11 +20,11 @@ class DataWriter:
             f.close()
         self._file = open(filename, 'a')
 
-        self._file.write("# I am the header\n")
+        self._file.write("# Voltage (V)\n")
 
     def write_data(self, incoming_data):
         write_data = incoming_data.T
-        np.savetxt(self._file, write_data)
+        np.savetxt(self._file, write_data, fmt='%s', delimiter=',')
 
     def close_file(self):
         self._file.close()

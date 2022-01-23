@@ -16,7 +16,7 @@ For more details, see the README.md
 UI Portions of this code (the graph_widget.py and graph_generator.py files) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
-
+import queue
 from multiprocessing import Queue, Process
 
 import numpy as np
@@ -26,7 +26,7 @@ from daqmx_reader import AnalogInputReader
 
 # Global Constants
 GLOBAL_STOP = 'S'
-""" Define the entire UI layout and event functionality with the KV language. This could also be its own .kv file."""
+# Define the entire UI layout and event functionality with the KV language. This could also be its own .kv file.
 KV = '''
 #:import MatplotFigure graph_widget
 Screen
@@ -84,33 +84,34 @@ Screen
                     TextInput:
                         hint_text: 'PXI1Slot2'
                         multiline: False
+                        on_text_validate: app.update_device_name(self.text)
                     Label:
                         text: 'AI Channel Number: '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
                     TextInput:
-                        input_filter: int
                         hint_text: '0'
                         multiline: False
+                        on_text_validate: app.update_channel_number(self.text)
                     Label:
-                        text: 'Max Voltage: '
+                        text: 'Max Voltage (V): '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
                     TextInput:
-                        input_filter: int
                         hint_text: '5'
                         multiline: False
+                        on_text_validate: app.update_max_voltage(self.text)
                     Label:
-                        text: 'Min Voltage: '
+                        text: 'Min Voltage (V): '
                         text_size: self.size
                         halign: 'right'
                         valign: 'middle'
                     TextInput:
-                        input_filter: int
                         hint_text: '-5'
                         multiline: False
+                        on_text_validate: app.update_min_voltage(self.text)
                     Label:
                         text: 'Terminal Configuration: '
                         text_size: self.size
@@ -118,7 +119,8 @@ Screen
                         valign: 'middle'
                     TextInput:
                         hint_text: 'DEFAULT'
-                        multline: False
+                        multiline: False
+                        on_text_validate: app.update_terminal_configuration(self.text)
                 BoxLayout
                     orientation:'vertical'
                     GridLayout:
@@ -136,36 +138,47 @@ Screen
                             halign: 'right'
                             valign: 'middle'
                         TextInput:
-                        Label:
-                            text: 'Sample Rate: '
-                            text_size: self.size
-                            halign: 'right'
-                            valign: 'middle'
-                        TextInput:
-                            input_filter: int
-                        Label:
-                            text: 'Number of Samples: '
-                            text_size: self.size
-                            halign: 'right'
-                            valign: 'middle'
-                        TextInput:
-                            input_filter: int
-                    GridLayout:
-                        rows: 1
-                        cols: 2
-                        Label:
-                            text: 'Error: '
-                            text_size: self.size
-                            halign: 'right'
-                            valign: 'middle'
-                        TextInput:
+                            hint_text: 'OnboardClock'
                             multiline: False
+                            on_text_validate: app.update_sample_clock_source(self.text)
+                        Label:
+                            text: 'Sample Rate (Hz): '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                            hint_text: '1000'
+                            multiline: False
+                            on_text_validate: app.update_sample_rate(self.text)
+                        Label:
+                            text: 'Samples Per Channel: '
+                            text_size: self.size
+                            halign: 'right'
+                            valign: 'middle'
+                        TextInput:
+                            hint_text: '100'
+                            multiline: False
+                            on_text_validate: app.update_number_of_samples(self.text)
+                    BoxLayout:
+                        size_hint_y: .5
+                        GridLayout:
+                            rows: 1
+                            cols: 2
+                            Label:
+                                text: 'Error: '
+                                text_size: self.size
+                                halign: 'right'
+                                valign: 'middle'
+                            TextInput:
+                                multiline: False
+                                background_color: [.8, .8, .8, 1]
+                                id: err
+                                
                                
 '''
 
 
-# Function to launch the run process
-def launch_run_process(task_configuration, ui_queue, cmd_queue):
+def launch_run_process(task_configuration, ui_queue, cmd_queue, ack_queue, err_queue):
     """
     This method launches the run process using multiprocessing.Process(). This process will use the configuration
     data provided at __init__ to create, configure, start, read from, and stop the NI
@@ -173,23 +186,18 @@ def launch_run_process(task_configuration, ui_queue, cmd_queue):
     """
 
     new_reader = AnalogInputReader(task_configuration=task_configuration,
-                                   ui_queue=ui_queue, cmd_queue=cmd_queue)
+                                   ui_queue=ui_queue, cmd_queue=cmd_queue, ack_queue=ack_queue, err_queue=err_queue)
     new_reader.run_process()
 
 
-# Function to safely close and kill the run process
-def destroy_run_process(reader_process, ui_queue, cmd_queue):
+def destroy_run_process(reader_process, cmd_queue, ack_queue):
     """
     This method properly shuts down the currently running run_process using a specific queue message
     """
-    stop_msg = GLOBAL_STOP
-    cmd_queue.put(stop_msg)
-    # Empty the UI queue enabling us to properly shut down our process
-    while not ui_queue.empty():
-        ui_queue.get()
-    # After the command queue sends the stop message 'S', we wait for the finished message 'F'. If we receive it,
+    cmd_queue.put(GLOBAL_STOP)
+    # After the command queue sends the stop message 'S', we wait for the finished message 'F'. When we receive it,
     # we know the DAQmx task has safely cleared and closed itself, thus we can safely close the reader process.
-    cmd_queue.get(block=True, timeout=None)
+    ack_queue.get(block=True, timeout=None)
     reader_process.kill()
 
 
@@ -220,6 +228,7 @@ if __name__ == "__main__":
 
         def build(self):
             """ Kivy method for building the app by returning a widget """
+            # Counter that counts loop iterations of the update_graph method which corresponds directly to sample #
             self.i = 0
             # TODO: Replace these hard-coded default values with the kivy utilities for creating and reading from an INI
             #  file at init
@@ -227,7 +236,7 @@ if __name__ == "__main__":
                                        'samples_per_read': 30,
                                        'channel': 0, 'dev_name': 'PXI1Slot2', 'max_voltage': 5, 'min_voltage': -5,
                                        'terminal_configuration': TerminalConfiguration.DEFAULT}
-
+            self.task_running = False
             self.screen = Builder.load_string(KV)
             return self.screen
 
@@ -235,17 +244,23 @@ if __name__ == "__main__":
             """ Called right after build() """
             self.reset_graph()
 
+        def on_stop(self):
+            """ Called at app exit """
+            if self.task_running:
+                self.stop_acquisition()
+
         def set_touch_mode(self, mode):
             self.screen.figure_wgt.touch_mode = mode
 
         def home(self):
+            """ Returns the graph widget to its home pan position """
             self.screen.figure_wgt.home()
 
         def update_graph(self, _):
-            try:
-                self.y = float(self.ui_queue.get())
-            except Exception:
-                pass
+            """ Updates the graph widget with the newest sample from the reader process """
+
+            # Block forever until a new sample is available for reading
+            self.y = self.ui_queue.get()
 
             xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
             self.screen.figure_wgt.line1.set_data(xdata, np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
@@ -258,6 +273,7 @@ if __name__ == "__main__":
                     self.screen.figure_wgt.figure.canvas.flush_events()
 
             self.i += 1
+            self.poll_for_error()
 
         def reset_graph(self):
             mygraph = GraphGenerator()
@@ -274,52 +290,109 @@ if __name__ == "__main__":
             """ Initialize the needed objects for the daqmx_reader AnalogInputReader() """
             self.ui_queue = Queue()
             self.cmd_queue = Queue()
-            # Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in turn creates, configures, starts, and reads from a single-channel DAQmx analog input task.
-            try:
-                self.reader_process = Process(target=launch_run_process,
-                                              args=(self.task_configuration, self.ui_queue, self.cmd_queue))
-                self.reader_process.start()
-                self.task_running = True
-                # We can use the built-in features of the kivy state machine to schedule a reoccurring call at out desired rate. In this case, this rate corresponds to the maximum update time of the graph
-                Clock.schedule_interval(self.update_graph, 1 / 60)
-            except Exception as e:
-                print(e)
+            self.ack_queue = Queue()
+            self.err_queue = Queue()
+            # Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
+            # turn creates, configures, starts, and reads from a single-channel DAQmx analog input task.
+
+            self.reader_process = Process(target=launch_run_process, args=(
+                self.task_configuration, self.ui_queue, self.cmd_queue, self.ack_queue, self.err_queue))
+            self.reader_process.start()
+            self.task_running = True
+            # We can use the built-in features of the kivy state machine to schedule a reoccurring call at out
+            # desired rate. In this case, this rate corresponds to the maximum update time of the graph
+            Clock.schedule_interval(self.update_graph, 1 / 60)
 
         def stop_acquisition(self):
             """ Properly shuts down the task currently running, in turn destroying the currently running MultiProcessing
             process """
-            try:
-                destroy_run_process(reader_process=self.reader_process, ui_queue=self.ui_queue,
-                                    cmd_queue=self.cmd_queue)
-                Clock.unschedule(self.update_graph)
-                self.i = 0
-                self.y = 0
-                self.task_running = False
-            except Exception as e:
-                print(e)
+            destroy_run_process(reader_process=self.reader_process, cmd_queue=self.cmd_queue,
+                                ack_queue=self.ack_queue)
+            Clock.unschedule(self.update_graph)
+            self.i = 0
+            self.y = 0
+            self.task_running = False
 
             self.reset_graph()
 
-        def update_physical_channel(self):
-            """ Updates the physical channel to be used for the DAQmx task """
+        def update_device_name(self, new_value):
+            """ Updates the real or simulated DAQmx device to be used for the DAQmx task """
+            try:
+                self.task_configuration['dev_name'] = new_value
+            except Exception as e:
+                self.update_error_display(e)
 
-        def update_max_voltage(self):
+        def update_channel_number(self, new_value):
+            """ Updates the physical analog input channel to be used for the DAQmx task """
+            try:
+                self.task_configuration['channel'] = int(new_value)
+            except Exception as e:
+                self.update_error_display(e)
+
+        def update_max_voltage(self, new_value):
             """ Updates the max voltage to be used for the DAQmx task """
+            try:
+                self.task_configuration['max_voltage'] = int(new_value)
+            except Exception as e:
+                self.update_error_display(e)
 
-        def update_min_voltage(self):
+        def update_min_voltage(self, new_value):
             """ Updates the min voltage to be used for the DAQmx task """
+            try:
+                self.task_configuration['min_voltage'] = int(new_value)
+            except Exception as e:
+                self.update_error_display(e)
 
-        def update_terminal_configuration(self):
+        def update_terminal_configuration(self, new_value):
             """ Updates the terminal configuration to be used for the DAQmx task """
+            if new_value == 'DEFAULT':
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.DEFAULT
+            elif new_value == 'RSE':
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.RSE
+            elif new_value == 'NRSE':
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.NRSE
+            elif new_value == 'DIFFERENTIAL':
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.DIFFERENTIAL
+            elif new_value == 'PSEUDODIFFERENTIAL':
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.PSEUDODIFFERENTIAL
+            else:
+                self.task_configuration['terminal_configuration'] = TerminalConfiguration.DEFAULT
+                self.update_error_display('Invalid terminal configuration')
 
-        def update_sample_clock_source(self):
+        def update_sample_clock_source(self, new_value):
             """ Updates the sample clock source to be used for the DAQmx task """
+            try:
+                self.task_configuration['sample_clock_source'] = new_value
+            except Exception as e:
+                self.update_error_display(e)
 
-        def update_sample_rate(self):
+        def update_sample_rate(self, new_value):
             """ Updates the sample rate to be used for the DAQmx task """
+            try:
+                self.task_configuration['sample_rate'] = int(new_value)
+            except Exception as e:
+                self.update_error_display(e)
 
-        def update_number_of_samples(self):
+        def update_number_of_samples(self, new_value):
             """ Updates the sample rate to be used for the DAQmx task """
+            try:
+                self.task_configuration['samples_per_read'] = int(new_value)
+            except Exception as e:
+                self.update_error_display(e)
+
+        def update_error_display(self, error):
+            """ Updates the error display with a new error string """
+            self.screen.ids.err.text = error
+
+        def poll_for_error(self):
+            """ Is scheduled to read from the error queue at the same time we read from the ui queue """
+            try:
+                err = self.err_queue.get_nowait()
+                self.update_error_display(err)
+                self.stop_acquisition()
+            except queue.Empty:
+                # Ignore the exception if the error queue is empty
+                pass
 
 
     myApp = MyApp()
