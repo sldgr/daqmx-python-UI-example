@@ -7,9 +7,12 @@ https://github.com/pbellino/daq_nidaqmx_example
 https://nidaqmx-python.readthedocs.io
 """
 
+import multiprocessing
+import queue
+import traceback
+
 import nidaqmx
 import numpy as np
-import queue
 from nidaqmx.constants import AcquisitionType
 from nidaqmx.stream_readers import AnalogSingleChannelReader
 
@@ -40,6 +43,7 @@ class AnalogInputReader:
         :param cmd_queue: A multiprocessing queue that receives a stop command character from the caller
         :param ack_queue: A multiprocessing queue that send an ACK command back to the caller
         """
+        self._exception = None
         self.sample_clock_source = task_configuration['sample_clock_source']
         self.sample_rate = task_configuration['sample_rate']
         self.samples_per_read = task_configuration['samples_per_read']
@@ -54,45 +58,37 @@ class AnalogInputReader:
         # Create an empty numpy array of proper size to use for DAQmx stream reading
         self.input_data = np.empty(shape=(self.samples_per_read,))
 
-    def run_process(self):
+    def run(self):
         """
         Read from the DAQmx task which is acquiring at sample_rate.Each loop iteration acquires samples_per_read and
         adds the samples to both the io and ui queues for logging and display. The default timeout is 10 seconds.
         """
-
-        try:
-            # Initialize the data writer for logging
-            self.writer = DataWriter()
-            # Try to create the task using the provided task parameters at __init__
-            self.create_task()
-            # Run the task if it was created successfully
-            self.start_task()
-            while True:
-                try:
-                    # Read from the DAQmx buffer the required number of samples on the configured channel, waiting,
-                    # if needed, up to timeout for the requested number_of_samples_per_channel becomes available
-                    self.reader.read_many_sample(data=self.input_data,
-                                                 number_of_samples_per_channel=self.samples_per_read,
-                                                 timeout=10.0)
-                    # Use the map keyword to more quickly append our data to the UI queue
-                    list(map(self.ui_queue.put, self.input_data))
-                    # Write our data to the data writer
-                    self.writer.write_data(self.input_data)
-                except Exception as e:
-                    raise e
-                try:
-                    msg = self.cmd_queue.get(block=False)
-                except queue.Empty:
-                    # The queue get method will throw this exception if empty. We don't care if it's empty,
-                    # so we ignore it
-                    msg = ""
-                if msg == GLOBAL_STOP:
-                    # Exit when the caller sends a global stop
-                    break
-            self.stop_task()
-            self.writer.close_file()
-        except Exception as e:
-            raise e
+        # Initialize the data writer for logging
+        self.writer = DataWriter()
+        # Try to create the task using the provided task parameters at __init__
+        self.create_task()
+        # Run the task if it was created successfully
+        self.start_task()
+        while True:
+            # Read from the DAQmx buffer the required number of samples on the configured channel, waiting,
+            # if needed, up to timeout for the requested number_of_samples_per_channel becomes available
+            self.reader.read_many_sample(data=self.input_data,
+                                         number_of_samples_per_channel=self.samples_per_read,
+                                         timeout=10.0)
+            # Use the map keyword to more quickly append our data to the UI queue
+            list(map(self.ui_queue.put, self.input_data))
+            # Write our data to the data writer
+            try:
+                msg = self.cmd_queue.get(block=False)
+            except queue.Empty:
+                # The queue get method will throw this exception if empty. We don't care if it's empty,
+                # so we ignore it
+                msg = ""
+            if msg == GLOBAL_STOP:
+                # Exit when the caller sends a global stop
+                break
+        self.stop_task()
+        self.writer.close_file()
 
     def create_task(self):
         """
@@ -131,7 +127,7 @@ class AnalogInputReader:
 
         self.task.stop()
         self.task.close()
-        # Flush both our queues, so we can properly kill the process this is being run in
+        # Flush our queues, so we can properly kill the process this is being run in
         while not self.ui_queue.empty():
             self.ui_queue.get()
         while not self.cmd_queue.empty():
@@ -140,3 +136,30 @@ class AnalogInputReader:
             self.ack_queue.get()
         # Send the global ACK back to the caller letting it know we are ready to die
         self.ack_queue.put(GLOBAL_ACK)
+
+
+class Process(multiprocessing.Process):
+    """
+    Class which returns child Exceptions to Parent.
+    https://stackoverflow.com/a/33599967/4992248
+    """
+
+    def __init__(self, *args, **kwargs):
+        multiprocessing.Process.__init__(self, *args, **kwargs)
+        self._parent_conn, self._child_conn = multiprocessing.Pipe()
+        self._exception = None
+
+    def run(self):
+        try:
+            multiprocessing.Process.run(self)
+            self._child_conn.send(None)
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._child_conn.send((e, tb))
+            # raise e  # You can still rise this exception if you need to
+
+    @property
+    def exception(self):
+        if self._parent_conn.poll():
+            self._exception = self._parent_conn.recv()
+        return self._exception

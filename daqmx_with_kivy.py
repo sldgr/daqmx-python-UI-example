@@ -16,13 +16,12 @@ For more details, see the README.md
 UI Portions of this code (the graph_widget.py and graph_generator.py files) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
-import queue
-from multiprocessing import Queue, Process
+from multiprocessing import Queue
 
 import numpy as np
 from nidaqmx.constants import TerminalConfiguration
 
-from daqmx_reader import AnalogInputReader
+from daqmx_reader import AnalogInputReader, Process
 
 # Global Constants
 GLOBAL_STOP = 'S'
@@ -237,21 +236,28 @@ if __name__ == "__main__":
 
         def update_graph(self, _):
             """ Updates the graph widget with the newest sample from the reader process """
+            if self.reader_process.is_alive():
+                if self.reader_process.exception:
+                    error, reader_process_traceback = self.reader_process.exception
+                    self.update_error_display(ChildProcessError(reader_process_traceback))
+                    self.stop_acquisition()
 
-            # Block forever until a new sample is available for reading
-            self.y = self.ui_queue.get()
-
-            xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
-            self.screen.figure_wgt.line1.set_data(xdata, np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
-            if self.i > 2:
-                self.screen.figure_wgt.xmax = np.max(xdata)
-                if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
-                    self.home()
                 else:
-                    self.screen.figure_wgt.figure.canvas.draw_idle()
-                    self.screen.figure_wgt.figure.canvas.flush_events()
+                    # Block forever until a new sample is available for reading
+                    self.y = self.ui_queue.get()
 
-            self.i += 1
+                    xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
+                    self.screen.figure_wgt.line1.set_data(xdata,
+                                                          np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
+                    if self.i > 2:
+                        self.screen.figure_wgt.xmax = np.max(xdata)
+                        if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
+                            self.home()
+                        else:
+                            self.screen.figure_wgt.figure.canvas.draw_idle()
+                            self.screen.figure_wgt.figure.canvas.flush_events()
+
+                    self.i += 1
 
         def reset_graph(self):
             mygraph = GraphGenerator()
@@ -269,16 +275,12 @@ if __name__ == "__main__":
             self.ui_queue = Queue()
             self.cmd_queue = Queue()
             self.ack_queue = Queue()
-            # Launches an instance of AnalogInputReader in another process using Process from Multiprocess. This in
-            # turn creates, configures, starts, and reads from a single-channel DAQmx analog input task.
             self.new_reader = AnalogInputReader(task_configuration=self.task_configuration,
                                                 ui_queue=self.ui_queue, cmd_queue=self.cmd_queue,
                                                 ack_queue=self.ack_queue)
-            self.reader_process = Process(target=self.new_reader.run_process)
+            self.reader_process = Process(target=self.new_reader.run)
             self.reader_process.start()
             self.task_running = True
-            # We can use the built-in features of the kivy state machine to schedule a reoccurring call at out
-            # desired rate. In this case, this rate corresponds to the maximum update time of the graph
             Clock.schedule_interval(self.update_graph, 1 / 60)
 
         def stop_acquisition(self):
@@ -295,6 +297,7 @@ if __name__ == "__main__":
             # reader process.
             self.ack_queue.get(block=True, timeout=None)
             self.reader_process.kill()
+            self.reader_process.join()
             self.task_running = False
             self.reset_graph()
 
@@ -366,6 +369,7 @@ if __name__ == "__main__":
         def update_error_display(self, error):
             """ Updates the error display with a new error string """
             self.screen.ids.err.text = error
+
 
     myApp = MyApp()
     MyApp().run()
