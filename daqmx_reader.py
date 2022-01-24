@@ -9,7 +9,6 @@ https://nidaqmx-python.readthedocs.io
 
 import multiprocessing
 import queue
-import traceback
 
 import nidaqmx
 import numpy as np
@@ -63,71 +62,58 @@ class AnalogInputReader:
         Read from the DAQmx task which is acquiring at sample_rate.Each loop iteration acquires samples_per_read and
         adds the samples to both the io and ui queues for logging and display. The default timeout is 10 seconds.
         """
-        # Initialize the data writer for logging
-        self.writer = DataWriter()
-        # Try to create the task using the provided task parameters at __init__
-        self.create_task()
-        # Run the task if it was created successfully
-        self.start_task()
-        while True:
-            # Read from the DAQmx buffer the required number of samples on the configured channel, waiting,
-            # if needed, up to timeout for the requested number_of_samples_per_channel becomes available
-            self.reader.read_many_sample(data=self.input_data,
-                                         number_of_samples_per_channel=self.samples_per_read,
-                                         timeout=10.0)
-            # Use the map keyword to more quickly append our data to the UI queue
-            list(map(self.ui_queue.put, self.input_data))
-            # Write our data to the data writer
-            try:
-                msg = self.cmd_queue.get(block=False)
-            except queue.Empty:
-                # The queue get method will throw this exception if empty. We don't care if it's empty,
-                # so we ignore it
-                msg = ""
-            if msg == GLOBAL_STOP:
-                # Exit when the caller sends a global stop
-                break
-        self.stop_task()
-        self.writer.close_file()
+        with nidaqmx.Task() as self.reader_task:
+            # Create a temp dict to pass multiple arguments more easily
+            chan_args = {
+                "min_val": self.min_voltage,
+                "max_val": self.max_voltage,
+                "terminal_config": self.terminal_configuration
+            }
+            # Build the proper channel name using the device + channel
+            channel_name = self.dev_name + "/ai" + str(self.channel)
 
-    def create_task(self):
-        """
-        Create a DAQmx task with the provided configuration parameters
-        """
+            # Add the DAQmx channel to the task
+            self.reader_task.ai_channels.add_ai_voltage_chan(channel_name, **chan_args)
 
-        self.task = nidaqmx.Task("Analog Input Task")
-        # Create a temp dict to pass multiple arguments more easily
-        chan_args = {
-            "min_val": self.min_voltage,
-            "max_val": self.max_voltage,
-            "terminal_config": self.terminal_configuration
-        }
-        # Build the proper channel name using the device + channel
-        channel_name = self.dev_name + "/ai" + str(self.channel)
-        # Add the DAQmx channel to the task
-        self.task.ai_channels.add_ai_voltage_chan(channel_name, **chan_args)
-        # Configure the timing of the task. Notice we do not specify the samples per channel. As this program only
-        # supports continuous acquisitions, samples per channel simply specifies the DAQmx PC buffer size which
-        # is usually ignored anyway as the default is sufficient.
-        # For more info, see: https://knowledge.ni.com/KnowledgeArticleDetails?id=kA03q000000YHpECAW&l=en-US
-        self.task.timing.cfg_samp_clk_timing(rate=self.sample_rate, sample_mode=AcquisitionType.CONTINUOUS)
+            # Configure the timing of the task. Notice we do not specify the samples per channel. As this program only
+            # supports continuous acquisitions, samples per channel simply specifies the DAQmx PC buffer size which
+            # is usually ignored anyway as the default is sufficient.
+            # For more info, see: https://knowledge.ni.com/KnowledgeArticleDetails?id=kA03q000000YHpECAW&l=en-US
+            self.reader_task.timing.cfg_samp_clk_timing(rate=self.sample_rate, sample_mode=AcquisitionType.CONTINUOUS)
 
-    def start_task(self):
-        """
-        Start the task and create the analog input channel reader
-        """
+            # Run the task if it was created successfully
+            self.reader_task.start()
+            self.reader = AnalogSingleChannelReader(self.reader_task.in_stream)
 
-        self.task.start()
-        self.reader = AnalogSingleChannelReader(self.task.in_stream)
+            # Initialize the data writer for logging
+            self.writer = DataWriter()
 
-    def stop_task(self):
-        """
-        Stop and clear the DAQmx task, empty our queues
-        """
+            while True:
+                # Read from the DAQmx buffer the required number of samples on the configured channel, waiting,
+                # if needed, up to timeout for the requested number_of_samples_per_channel becomes available
+                self.reader.read_many_sample(data=self.input_data,
+                                             number_of_samples_per_channel=self.samples_per_read,
+                                             timeout=10.0)
+                # Use the map keyword to more quickly append our data to the UI queue
+                list(map(self.ui_queue.put, self.input_data))
+                # Write our data to the data writer
+                try:
+                    msg = self.cmd_queue.get(block=False)
+                except queue.Empty:
+                    # The queue get method will throw this exception if empty. We don't care if it's empty,
+                    # so we ignore it
+                    msg = ""
+                if msg == GLOBAL_STOP:
+                    # Exit when the caller sends a global stop
+                    break
+            self.writer.close_file()
+        self.stop_process()
 
-        self.task.stop()
-        self.task.close()
-        # Flush our queues, so we can properly kill the process this is being run in
+
+    def stop_process(self):
+        """
+        Flush the queues and send the final message back to the caller.
+        """
         while not self.ui_queue.empty():
             self.ui_queue.get()
         while not self.cmd_queue.empty():
@@ -154,9 +140,8 @@ class Process(multiprocessing.Process):
             multiprocessing.Process.run(self)
             self._child_conn.send(None)
         except Exception as e:
-            tb = traceback.format_exc()
-            self._child_conn.send((e, tb))
-            # raise e  # You can still rise this exception if you need to
+            exception = str(e)
+            self._child_conn.send(exception)
 
     @property
     def exception(self):

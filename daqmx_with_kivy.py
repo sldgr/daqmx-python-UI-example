@@ -17,7 +17,7 @@ UI Portions of this code (the graph_widget.py and graph_generator.py files) orig
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
 from multiprocessing import Queue
-
+from time import sleep
 import numpy as np
 from nidaqmx.constants import TerminalConfiguration
 
@@ -238,12 +238,11 @@ if __name__ == "__main__":
             """ Updates the graph widget with the newest sample from the reader process """
             if self.reader_process.is_alive():
                 if self.reader_process.exception:
-                    error, reader_process_traceback = self.reader_process.exception
-                    self.update_error_display(ChildProcessError(reader_process_traceback))
+                    self.error = self.reader_process.exception
+                    self.update_error_display(self.error)
                     self.stop_acquisition()
-
                 else:
-                    # Block forever until a new sample is available for reading
+                    # Block until a new sample is available for reading
                     self.y = self.ui_queue.get()
 
                     xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
@@ -258,6 +257,10 @@ if __name__ == "__main__":
                             self.screen.figure_wgt.figure.canvas.flush_events()
 
                     self.i += 1
+            else:
+                self.error = self.reader_process.exception
+                self.update_error_display(self.error)
+                self.stop_acquisition()
 
         def reset_graph(self):
             mygraph = GraphGenerator()
@@ -279,8 +282,11 @@ if __name__ == "__main__":
                                                 ui_queue=self.ui_queue, cmd_queue=self.cmd_queue,
                                                 ack_queue=self.ack_queue)
             self.reader_process = Process(target=self.new_reader.run)
+            self.reader_process.daemon = False
             self.reader_process.start()
+
             self.task_running = True
+            sleep(1)
             Clock.schedule_interval(self.update_graph, 1 / 60)
 
         def stop_acquisition(self):
@@ -291,13 +297,24 @@ if __name__ == "__main__":
             # Reset the counter and y value
             self.i = 0
             self.y = float(0)
-            self.cmd_queue.put(GLOBAL_STOP)
-            # After the command queue sends the stop message 'S', we wait for the finished message 'F'. When we
-            # receive it, we know the DAQmx task has safely cleared and closed itself, thus we can safely close the
-            # reader process.
-            self.ack_queue.get(block=True, timeout=None)
-            self.reader_process.kill()
-            self.reader_process.join()
+
+            if self.reader_process.is_alive():
+                # After the command queue sends the stop message 'S', we wait for the finished message 'F'. When we
+                # receive it, we know the DAQmx task has safely cleared and closed itself, thus we can safely close the
+                # reader process.
+                self.cmd_queue.put(GLOBAL_STOP)
+                self.ack_queue.get(block=True, timeout=None)
+                self.reader_process.terminate()
+                self.reader_process.join()
+            else:
+                while not self.ui_queue.empty():
+                    self.ui_queue.get()
+                while not self.cmd_queue.empty():
+                    self.cmd_queue.get()
+                while not self.ack_queue.empty():
+                    self.ack_queue.get()
+                self.reader_process.join()
+
             self.task_running = False
             self.reset_graph()
 
@@ -368,7 +385,7 @@ if __name__ == "__main__":
 
         def update_error_display(self, error):
             """ Updates the error display with a new error string """
-            self.screen.ids.err.text = error
+            self.screen.ids.err.text = str(error)
 
 
     myApp = MyApp()
