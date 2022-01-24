@@ -45,7 +45,7 @@ or simulated NI (National Instruments) hardware Other features worth mentioning 
 
 1. Use of Kivy, a cross-platform NUI development framework for python allowing easy separation of a UI layout and
    business logic
-2. Real-time, (60+ FPS) graph display with home, zoom, and pan
+2. Real-time, (60+ FPS) graph display with home, zoom, and pan using matplotlib and numpy
 3. Automatic logging of acquired data to a .csv file
 4. Use of the python multiprocessing package to separate the Kivy App process from the DAQmx Stream Reader process
 
@@ -150,7 +150,7 @@ To run, simply use the following command in the top-level of the repository with
    .\python daqmx_with_kivy.py
    ```
 
-From here, you can hit Start Acquisition immediately if you are using device name PXI1Slot2. If you are using a real
+From here, you can hit 'Start Acquisition' immediately if you are using device name PXI1Slot2. If you are using a real
 device or a device, a device with different name in NI MAX, or simply want to change the settings feel free to do by
 hitting 'Enter' on your keyboard after you type in each field. If there is an issue, the error will be displayed in the
 error box in the bottom right-hand corner.
