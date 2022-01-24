@@ -60,7 +60,7 @@ or simulated NI (National Instruments) hardware Other features worth mentioning 
 
 * [mp_007's kivy_matplotlib_widget](https://github.com/mp-007/kivy_matplotlib_widget) - Used in the UI with code taken
   from real-time plotting examples
-* [pbellino's daq_nidaqmx_example](https://github.com/pbellino/daq_nidaqmx_example) - Inspiration and borrowed fie
+* [pbellino's daq_nidaqmx_example](https://github.com/pbellino/daq_nidaqmx_example) - Inspiration and borrowed file
   writer
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -69,7 +69,7 @@ or simulated NI (National Instruments) hardware Other features worth mentioning 
 
 ## Getting Started
 
-Get a local copy up and running follow these steps.
+Get a local copy up and running by following these steps.
 
 ### Prerequisites
 
@@ -144,11 +144,25 @@ What you need before proceeding with the installation:
 
 ## Usage
 
-To run, simply use the following command in the top-level of the repository with the virtual environment env running:
+To run, simply use the following command in the top-level of the repository with the virtual environment (env) running:
 
    ```sh
    .\python daqmx_with_kivy.py
    ```
+
+From here, you can hit Start Acquisition immediately if you are using device name PXI1Slot2. If you are using a real
+device or a device, a device with different name in NI MAX, or simply want to change the settings feel free to do by
+hitting 'Enter' on your keyboard after you type in each field. If there is an issue, the error will be displayed in the
+error box in the bottom right-hand corner.
+
+After starting, a single channel, continuous analog input voltage task will begin. If using a simulated device with the
+default settings, this task will acquire a -5V to 5V sine wave with noise at 1000 Hz. The graph will update in
+real-time (up to 60 FPS) point-by-point. The UI will run in one process and the DAQmx acquisition will run in other
+process. The DAQmx task will read the number of samples requested (default 100) per read and will write the samples to a
+.csv file.
+
+To stop the task, simply hit 'Stop Acquisition' or close the window. A .csv file will eventually appear after being
+written and closed by the DAQmx process.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
