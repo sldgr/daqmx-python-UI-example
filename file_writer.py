@@ -28,3 +28,5 @@ class DataWriter:
 
     def close_file(self):
         self._file.close()
+
+

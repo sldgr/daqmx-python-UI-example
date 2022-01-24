@@ -97,6 +97,7 @@ class AnalogInputReader:
                 # Use the map keyword to more quickly append our data to the UI queue
                 list(map(self.ui_queue.put, self.input_data))
                 # Write our data to the data writer
+                self.writer.write_data(self.input_data)
                 try:
                     msg = self.cmd_queue.get(block=False)
                 except queue.Empty:

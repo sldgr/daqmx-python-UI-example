@@ -16,8 +16,10 @@ For more details, see the README.md
 UI Portions of this code (the graph_widget.py and graph_generator.py files) originally authored by: mp-007
 Source: https://github.com/mp-007/kivy_matplotlib_widget
 """
+import queue
 from multiprocessing import Queue
 from time import sleep
+
 import numpy as np
 from nidaqmx.constants import TerminalConfiguration
 
@@ -33,6 +35,19 @@ Screen
     BoxLayout:
         orientation:'vertical'
         padding: [20, 20, 20, 20]
+        BoxLayout
+            size_hint_y: .1
+            Label: 
+                text: 'DAQmx - Continuous Analog Input'
+                text_size: self.size
+                font_size: 20
+                halign: 'left'
+                valign: 'middle'
+            Label: 
+                text: 'Press Enter to save any change'
+                text_size: self.size
+                halign: 'right'
+                valign: 'middle'
         BoxLayout:
             size_hint_y:0.1
             Button:
@@ -169,11 +184,9 @@ Screen
                                 halign: 'right'
                                 valign: 'middle'
                             TextInput:
-                                multiline: False
+                                multiline: True
                                 background_color: [.8, .8, .8, 1]
-                                id: err
-                                
-                               
+                                id: err                          
 '''
 
 # Guard allowing use to separate the Kivy logic entirely from the multiprocessing DAQmx functions. We have to keep
@@ -228,6 +241,7 @@ if __name__ == "__main__":
                 self.stop_acquisition()
 
         def set_touch_mode(self, mode):
+            """ Sets the touch mode """
             self.screen.figure_wgt.touch_mode = mode
 
         def home(self):
@@ -237,29 +251,35 @@ if __name__ == "__main__":
         def update_graph(self, _):
             """ Updates the graph widget with the newest sample from the reader process """
             if self.reader_process.is_alive():
+                # If the reader process is alive, we can keep reading data from our queue and checking for errors
                 if self.reader_process.exception:
-                    self.error = self.reader_process.exception
-                    self.update_error_display(self.error)
+                    # If the process has an error, read it and then stop it
+                    self.read_error()
                     self.stop_acquisition()
                 else:
-                    # Block until a new sample is available for reading
-                    self.y = self.ui_queue.get()
-
-                    xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
-                    self.screen.figure_wgt.line1.set_data(xdata,
-                                                          np.append(self.screen.figure_wgt.line1.get_ydata(), self.y))
-                    if self.i > 2:
-                        self.screen.figure_wgt.xmax = np.max(xdata)
-                        if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
-                            self.home()
-                        else:
-                            self.screen.figure_wgt.figure.canvas.draw_idle()
-                            self.screen.figure_wgt.figure.canvas.flush_events()
-
-                    self.i += 1
+                    try:
+                        # Try to get from our queue immediately. Only plot if we get data.
+                        self.y = self.ui_queue.get_nowait()
+                        # Update our x data with our current sample count
+                        xdata = np.append(self.screen.figure_wgt.line1.get_xdata(), self.i)
+                        # Update the y data
+                        self.screen.figure_wgt.line1.set_data(xdata,
+                                                              np.append(self.screen.figure_wgt.line1.get_ydata(),
+                                                                        self.y))
+                        if self.i > 2:
+                            self.screen.figure_wgt.xmax = np.max(xdata)
+                            if self.screen.figure_wgt.axes.get_xlim()[0] == self.screen.figure_wgt.xmin:
+                                self.home()
+                            else:
+                                self.screen.figure_wgt.figure.canvas.draw_idle()
+                                self.screen.figure_wgt.figure.canvas.flush_events()
+                        self.i += 1
+                    except queue.Empty:
+                        # Do not update the graph when we don't have data.
+                        pass
             else:
-                self.error = self.reader_process.exception
-                self.update_error_display(self.error)
+                # This catches the first call to update_graph
+                self.read_error()
                 self.stop_acquisition()
 
         def reset_graph(self):
@@ -278,16 +298,20 @@ if __name__ == "__main__":
             self.ui_queue = Queue()
             self.cmd_queue = Queue()
             self.ack_queue = Queue()
+            # Create a new instance of the reader class with the provided configuration and queues
             self.new_reader = AnalogInputReader(task_configuration=self.task_configuration,
                                                 ui_queue=self.ui_queue, cmd_queue=self.cmd_queue,
                                                 ack_queue=self.ack_queue)
+            # Create a new multiprocessing process using the Process class of daqmx_reader.py. This is simply a
+            # wrapper around the regular multiprocessing Process but with the ability to return an error
             self.reader_process = Process(target=self.new_reader.run)
-            self.reader_process.daemon = False
+            # The DAQmx reader process will start at this call
             self.reader_process.start()
-
-            self.task_running = True
+            # Give the task a second to configure itself
             sleep(1)
-            Clock.schedule_interval(self.update_graph, 1 / 60)
+            # Schedule the rate at which we update our graph and
+            Clock.schedule_interval(self.update_graph, 1 / 120)
+            self.task_running = True
 
         def stop_acquisition(self):
             """ Properly shuts down the task currently running, in turn destroying the currently running MultiProcessing
@@ -307,6 +331,7 @@ if __name__ == "__main__":
                 self.reader_process.terminate()
                 self.reader_process.join()
             else:
+                # Since the reader terminated on error, it's our job to empty the queues for proper shutdown
                 while not self.ui_queue.empty():
                     self.ui_queue.get()
                 while not self.cmd_queue.empty():
@@ -318,18 +343,20 @@ if __name__ == "__main__":
             self.task_running = False
             self.reset_graph()
 
+        def read_error(self):
+            self.error = self.reader_process.exception
+            self.update_error_display(self.error)
+
         def update_device_name(self, new_value):
             """ Updates the real or simulated DAQmx device to be used for the DAQmx task """
-            try:
-                self.task_configuration['dev_name'] = new_value
-            except Exception as e:
-                self.update_error_display(e)
+            self.task_configuration['dev_name'] = new_value
 
         def update_channel_number(self, new_value):
             """ Updates the physical analog input channel to be used for the DAQmx task """
             try:
                 self.task_configuration['channel'] = int(new_value)
             except Exception as e:
+                e = 'Input must be an integer'
                 self.update_error_display(e)
 
         def update_max_voltage(self, new_value):
@@ -337,6 +364,7 @@ if __name__ == "__main__":
             try:
                 self.task_configuration['max_voltage'] = int(new_value)
             except Exception as e:
+                e = 'Input must be an integer'
                 self.update_error_display(e)
 
         def update_min_voltage(self, new_value):
@@ -344,6 +372,7 @@ if __name__ == "__main__":
             try:
                 self.task_configuration['min_voltage'] = int(new_value)
             except Exception as e:
+                e = 'Input must be an integer'
                 self.update_error_display(e)
 
         def update_terminal_configuration(self, new_value):
@@ -360,20 +389,19 @@ if __name__ == "__main__":
                 self.task_configuration['terminal_configuration'] = TerminalConfiguration.PSEUDODIFFERENTIAL
             else:
                 self.task_configuration['terminal_configuration'] = TerminalConfiguration.DEFAULT
-                self.update_error_display('Invalid terminal configuration')
+                self.update_error_display('Invalid terminal configuration. Valid options include DEFAULT, RSE, NRSE, '
+                                          'DIFFERENTIAL,PSEUDODIFFERENTIAL')
 
         def update_sample_clock_source(self, new_value):
             """ Updates the sample clock source to be used for the DAQmx task """
-            try:
-                self.task_configuration['sample_clock_source'] = new_value
-            except Exception as e:
-                self.update_error_display(e)
+            self.task_configuration['sample_clock_source'] = new_value
 
         def update_sample_rate(self, new_value):
             """ Updates the sample rate to be used for the DAQmx task """
             try:
                 self.task_configuration['sample_rate'] = int(new_value)
             except Exception as e:
+                e = 'Input must be an integer'
                 self.update_error_display(e)
 
         def update_number_of_samples(self, new_value):
@@ -381,12 +409,12 @@ if __name__ == "__main__":
             try:
                 self.task_configuration['samples_per_read'] = int(new_value)
             except Exception as e:
+                e = 'Input must be an integer'
                 self.update_error_display(e)
 
         def update_error_display(self, error):
             """ Updates the error display with a new error string """
             self.screen.ids.err.text = str(error)
-
 
     myApp = MyApp()
     MyApp().run()
