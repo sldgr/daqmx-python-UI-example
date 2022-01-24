@@ -40,8 +40,8 @@
 ## About The Project
 
 This is a Python take on the LabVIEW built-in example VI called Voltage - Continuous Input. Like the G-code equivalent,
-this code features the ability to configure, start and stop a DAQmx single-channel analog input voltage task. With real
-or simulated NI (National Instruments) hardware Other features worth mentioning include:
+this code features the ability to configure, start and stop a DAQmx single-channel analog input voltage task with real
+or simulated NI (National Instruments) hardware. Other features worth mentioning include:
 
 1. Use of Kivy, a cross-platform NUI development framework for python allowing easy separation of a UI layout and
    business logic
