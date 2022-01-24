@@ -18,6 +18,9 @@
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
+      <ul>
+        <li><a href="#acknowledgments">Acknowledgments</a></li>
+      </ul>
     </li>
     <li>
       <a href="#getting-started">Getting Started</a>
@@ -27,11 +30,8 @@
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
 
@@ -56,7 +56,7 @@ or simulated NI (National Instruments) hardware Other features worth mentioning 
 * [Numpy](https://numpy.org/doc/stable/index.html)
 * [Matplotlib](https://matplotlib.org/)
 
-### ACKKNOWLEDGEMENTS
+### ACKNOWLEDGEMENTS
 
 * [mp_007's kivy_matplotlib_widget](https://github.com/mp-007/kivy_matplotlib_widget) - Used in the UI with code taken
   from real-time plotting examples
@@ -69,11 +69,13 @@ or simulated NI (National Instruments) hardware Other features worth mentioning 
 
 ## Getting Started
 
-To get a local copy up and running follow these example steps.
+Get a local copy up and running follow these steps.
 
 ### Prerequisites
 
-What you need before proceeding with the installation
+What you need before proceeding with the installation:
+
+* Windows 10
 
 * Python 3.9 (3.10 or later not supported)
   ```sh
@@ -91,6 +93,11 @@ What you need before proceeding with the installation
   py -m pip install --user virtualenv
   ```
 
+* NI DAQmx Full Driver (Latest Version) <- Needed for NI MAX
+  ```sh
+  https://www.ni.com/en-us/support/downloads/drivers/download.ni-daqmx.html#428058
+  ```
+
 ### Installation
 
 1. Clone the repo (or simply download as zip and then unzip):
@@ -99,26 +106,36 @@ What you need before proceeding with the installation
    ```
 2. Update pip and other installation dependencies:
       ```sh
-   python -m pip install --upgrade pip setuptools virtualenv
+   py -m pip install --upgrade pip setuptools virtualenv
    ```
 3. Navigate to your repo:
    ```sh
    cd <repo>
    ```
 4. Create a virtual environment:
-   ```js
+   ```sh
    py -m venv env
    ```
 
 5. Activate the virtual environment:
-   ```js
+   ```sh
    .\env\Scripts\activate
    ```
 
 6. Install necessary packages from requirements.txt:
-   ```js
+   ```sh
    py -m pip install -r requirements.txt
    ```
+7. (Optional for simulated hardware):
+
+    1. Open NI MAX (Measurement & Automation Explorer)
+    2. Right-click > 'My System > Devices and Interfaces' and select 'Create New...'
+    3. Select 'Simulated NI-DAQmx Device or Modular Instrument'
+    4. Select 'Finish'
+    5. Select any device that supports analog input. (e.g. PXIe-6368)
+    6. Select a desired PXI chassis and slot # (or use defaults)
+    7. Verify the simulated device is working by right-clicking and selecting ' Test Panel...' and then hitting 'Start'
+       when it opens. Verify you see a signal.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -129,9 +146,8 @@ What you need before proceeding with the installation
 
 To run, simply use the following command in the top-level of the repository with the virtual environment env running:
 
-   ```js
-   .\python
-daqmx_with_kivy.py
+   ```sh
+   .\python daqmx_with_kivy.py
    ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -156,17 +172,6 @@ simply open an issue with the tag "enhancement". Don't forget to give the projec
 5. Open a Pull Request
 
 <p align="right">(<a href="#top">back to top</a>)</p>
-
-
-
-<!-- LICENSE -->
-
-## License
-
-Distributed under the MIT License. See `LICENSE.txt` for more information.
-
-<p align="right">(<a href="#top">back to top</a>)</p>
-
 
 
 <!-- CONTACT -->
